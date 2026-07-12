@@ -92,8 +92,12 @@ function levelOf(name) {
 }
 
 function uniqueDivisions() {
+  // Only divisions relevant to the current rounds selection get chips;
+  // prelims divisions keep their enabled/disabled state while hidden.
+  const wantPrelims = state.rounds === "all";
   const map = new Map();
   for (const d of state.data.divisions) {
+    if (d.round === "prelims" && !wantPrelims) continue;
     if (!map.has(d.name)) map.set(d.name, { name: d.name, fieldSize: 0 });
     map.get(d.name).fieldSize += d.field_size;
   }
@@ -130,6 +134,7 @@ function initControls() {
 
   wireSegmented($("rounds-toggle"), (val) => {
     state.rounds = val;
+    buildChips();
     render();
   });
   wireSegmented($("method-toggle"), (val) => {
@@ -167,7 +172,7 @@ function initControls() {
     render();
   });
   $("divisions-none").addEventListener("click", () => {
-    state.enabledDivisions.clear();
+    for (const d of uniqueDivisions()) state.enabledDivisions.delete(d.name);
     buildChips();
     render();
   });
