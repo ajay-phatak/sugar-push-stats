@@ -4,52 +4,102 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sugar-push-stats — WCS judge statistics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 <script src="chart.umd.js"></script>
 </head>
 <body>
 <div class="viz-root">
-  <header>
-    <h1>sugar-push-stats</h1>
+  <header class="masthead">
+    <h1 class="wordmark">Sugar Push Stats<span class="accent-dot">.</span></h1>
+    <div class="rule"></div>
     <p class="subtitle">How closely each judge's marks track the official results, from <a href="https://eepro.com/results/" target="_blank" rel="noopener">eepro.com</a> scoresheets.</p>
   </header>
 
-  <section class="controls" aria-label="Filters">
-    <label>Year
-      <select id="year"></select>
-    </label>
-    <label>Event
-      <select id="event" disabled><option>Pick a year…</option></select>
-    </label>
-    <label>Rounds
-      <select id="rounds">
-        <option value="finals">Finals only</option>
-        <option value="all">Finals + Prelims</option>
-      </select>
-    </label>
-    <label>Outlier weighting
-      <select id="method">
-        <option value="linear">Linear</option>
-        <option value="logarithmic">Logarithmic</option>
-        <option value="exponential">Exponential</option>
-      </select>
-    </label>
+  <section class="control-deck" aria-label="Filters">
+    <div class="deck-row">
+      <div class="field">
+        <label for="year">Year</label>
+        <select id="year"></select>
+      </div>
+      <div class="field">
+        <label for="event">Event</label>
+        <select id="event" disabled><option>Pick a year…</option></select>
+      </div>
+    </div>
+    <div class="deck-row">
+      <div class="field">
+        <label id="rounds-label">Rounds</label>
+        <div class="segmented" role="group" aria-labelledby="rounds-label" id="rounds-toggle">
+          <button type="button" data-value="finals" aria-pressed="true">Finals only</button>
+          <button type="button" data-value="all" aria-pressed="false">Finals + Prelims</button>
+        </div>
+      </div>
+      <div class="field method-field">
+        <div class="method-head">
+          <label id="method-label">Outlier weighting</label>
+          <button type="button" class="info-toggle" id="method-info-btn" aria-expanded="false" aria-controls="method-explainer">?</button>
+        </div>
+        <div class="segmented" role="group" aria-labelledby="method-label" id="method-toggle">
+          <button type="button" data-value="linear" aria-pressed="true">Linear</button>
+          <button type="button" data-value="logarithmic" aria-pressed="false">Logarithmic</button>
+          <button type="button" data-value="exponential" aria-pressed="false">Exponential</button>
+        </div>
+        <div class="method-explainer" id="method-explainer" hidden>
+          <h3>What "outlier weighting" changes</h3>
+          <div class="explainer-row">
+            <div class="ex-label">Linear</div>
+            <p class="ex-copy">Every point of disagreement counts the same — one wild mark and ten small ones matter equally.</p>
+            <div class="ex-bars"><div class="ex-bar-track"><div class="ex-bar-fill" style="width:45%"></div></div></div>
+          </div>
+          <div class="explainer-row">
+            <div class="ex-label">Logarithmic</div>
+            <p class="ex-copy">Forgiving of one freak mark; a judge who's mostly close but occasionally way off still scores well.</p>
+            <div class="ex-bars"><div class="ex-bar-track"><div class="ex-bar-fill" style="width:30%"></div></div></div>
+          </div>
+          <div class="explainer-row">
+            <div class="ex-label">Exponential</div>
+            <p class="ex-copy">Punishes wild outlier marks hardest — a single way-off placement can dominate the score.</p>
+            <div class="ex-bars"><div class="ex-bar-track"><div class="ex-bar-fill" style="width:80%"></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="method-note" id="method-note"></p>
   </section>
-  <p class="method-note" id="method-note"></p>
 
-  <div id="status" class="status" hidden></div>
+  <div id="status-region"></div>
 
   <section id="results" hidden>
-    <div class="chips" id="division-chips" aria-label="Divisions included"></div>
+    <div class="division-panel">
+      <div class="division-summary">
+        <span class="count" id="division-count"></span>
+        <div class="summary-actions">
+          <button type="button" id="divisions-all">Select all</button>
+          <button type="button" id="divisions-none">Clear all</button>
+        </div>
+      </div>
+      <div id="division-groups"></div>
+    </div>
 
     <div class="card">
       <h2 id="main-title">Judge consensus scores</h2>
-      <p class="card-note">Lower = closer to the official outcome. Click a bar to see that judge's individual marks. Score is the weighted average deviation, normalized so different field sizes compare fairly.</p>
+      <p class="card-note">Lower = closer to the official outcome. Score is the weighted average deviation, normalized so different field sizes compare fairly.</p>
       <div class="chart-box"><canvas id="main-chart" role="img" aria-label="Bar chart of judge consensus scores"></canvas></div>
+      <p class="chart-hint">Click a bar to see that judge's individual marks.</p>
     </div>
 
-    <div class="card" id="detail-card" hidden>
-      <h2 id="detail-title"></h2>
+    <div class="card spotlight" id="detail-card" hidden>
+      <div class="spotlight-head">
+        <div class="spotlight-title">
+          <h2 id="detail-title"></h2>
+          <div class="spotlight-badges" id="detail-badges"></div>
+        </div>
+        <button type="button" class="icon-btn" id="detail-close" aria-label="Close judge detail">✕</button>
+      </div>
       <p class="card-note">Each dot is one mark: how far it landed from the official result (0 = exact agreement, 1 = maximal disagreement). Hover a dot for the competitor.</p>
       <div class="chart-box"><canvas id="detail-chart" role="img" aria-label="Strip plot of individual mark deviations"></canvas></div>
       <div class="legend" id="detail-legend"></div>

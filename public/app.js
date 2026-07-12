@@ -9,6 +9,8 @@ const METHOD_NOTES = {
   exponential: "Exponential (RMS): wild outlier marks are punished hardest.",
 };
 
+const LEVEL_ORDER = ["Newcomer", "Novice", "Intermediate", "Advanced", "All-Star", "Champion", "Junior", "Masters", "Pro"];
+
 const state = {
   data: null,          // AnalysisResponse from the API
   method: "linear",
@@ -17,6 +19,7 @@ const state = {
   selectedJudge: null,
   mainChart: null,
   detailChart: null,
+  openGroups: new Set(),
 };
 
 /* ---------- palette (read from CSS so light/dark stays in style.css) ---------- */
@@ -79,6 +82,40 @@ function judgeScores() {
   return rows;
 }
 
+/* ---------- division grouping ---------- */
+
+function levelOf(name) {
+  for (const lvl of LEVEL_ORDER) {
+    if (name.toLowerCase().includes(lvl.toLowerCase())) return lvl;
+  }
+  return "Other";
+}
+
+function uniqueDivisions() {
+  const map = new Map();
+  for (const d of state.data.divisions) {
+    if (!map.has(d.name)) map.set(d.name, { name: d.name, fieldSize: 0 });
+    map.get(d.name).fieldSize += d.field_size;
+  }
+  return [...map.values()];
+}
+
+function groupedDivisions() {
+  const divs = uniqueDivisions();
+  const groups = new Map();
+  for (const d of divs) {
+    const lvl = levelOf(d.name);
+    if (!groups.has(lvl)) groups.set(lvl, []);
+    groups.get(lvl).push(d);
+  }
+  const ordered = [];
+  for (const lvl of LEVEL_ORDER) {
+    if (groups.has(lvl)) ordered.push([lvl, groups.get(lvl)]);
+  }
+  if (groups.has("Other")) ordered.push(["Other", groups.get("Other")]);
+  return ordered;
+}
+
 /* ---------- controls ---------- */
 
 function initControls() {
@@ -90,25 +127,128 @@ function initControls() {
   }
   yearSel.addEventListener("change", () => loadEvents(Number(yearSel.value)));
   $("event").addEventListener("change", () => loadAnalysis());
-  $("rounds").addEventListener("change", (e) => {
-    state.rounds = e.target.value;
+
+  wireSegmented($("rounds-toggle"), (val) => {
+    state.rounds = val;
     render();
   });
-  $("method").addEventListener("change", (e) => {
-    state.method = e.target.value;
+  wireSegmented($("method-toggle"), (val) => {
+    state.method = val;
     $("method-note").textContent = METHOD_NOTES[state.method];
     render();
   });
   $("method-note").textContent = METHOD_NOTES[state.method];
+
+  const infoBtn = $("method-info-btn");
+  const explainer = $("method-explainer");
+  infoBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = infoBtn.getAttribute("aria-expanded") === "true";
+    infoBtn.setAttribute("aria-expanded", String(!open));
+    explainer.hidden = open;
+  });
+  document.addEventListener("click", (e) => {
+    if (!explainer.hidden && !explainer.contains(e.target) && e.target !== infoBtn) {
+      explainer.hidden = true;
+      infoBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !explainer.hidden) {
+      explainer.hidden = true;
+      infoBtn.setAttribute("aria-expanded", "false");
+      infoBtn.focus();
+    }
+  });
+
+  $("divisions-all").addEventListener("click", () => {
+    for (const d of uniqueDivisions()) state.enabledDivisions.add(d.name);
+    buildChips();
+    render();
+  });
+  $("divisions-none").addEventListener("click", () => {
+    state.enabledDivisions.clear();
+    buildChips();
+    render();
+  });
+
+  $("detail-close").addEventListener("click", () => {
+    state.selectedJudge = null;
+    renderDetail(judgeScores());
+  });
+
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
   loadEvents(thisYear);
 }
 
-function setStatus(msg, isError = false) {
-  const el = $("status");
-  el.hidden = !msg;
-  el.textContent = msg || "";
-  el.classList.toggle("error", isError);
+function wireSegmented(container, onChange) {
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn || !container.contains(btn)) return;
+    for (const b of container.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b === btn));
+    onChange(btn.dataset.value);
+  });
+}
+
+/* ---------- status region ---------- */
+
+function setStatus(html) {
+  $("status-region").innerHTML = html;
+}
+
+function clearStatus() {
+  $("status-region").innerHTML = "";
+}
+
+function statusLoading(msg) {
+  setStatus(`
+    <div class="state-card">
+      <div class="state-icon">⟳</div>
+      <div>
+        <p class="state-title">Fetching scoresheets…</p>
+        <p class="state-body">${escapeHtml(msg)}</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="skeleton-bars">
+        ${Array.from({ length: 6 }).map(() => `
+          <div class="sk-row">
+            <div class="sk-label"></div>
+            <div class="sk-bar" style="max-width:${30 + Math.random() * 55}%"></div>
+          </div>`).join("")}
+      </div>
+    </div>
+  `);
+}
+
+function statusError(msg) {
+  setStatus(`
+    <div class="state-card error">
+      <div class="state-icon">!</div>
+      <div>
+        <p class="state-title">Couldn't load that</p>
+        <p class="state-body">${escapeHtml(msg)}</p>
+      </div>
+    </div>
+  `);
+}
+
+function statusEmpty() {
+  setStatus(`
+    <div class="state-card">
+      <div class="state-icon">♪</div>
+      <div>
+        <p class="state-title">Pick a year and event</p>
+        <p class="state-body">Once you choose an event, its scoresheets are fetched and parsed — first load can take a few seconds.</p>
+      </div>
+    </div>
+  `);
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
 }
 
 async function loadEvents(year) {
@@ -116,7 +256,7 @@ async function loadEvents(year) {
   evSel.disabled = true;
   evSel.innerHTML = "<option>Loading…</option>";
   $("results").hidden = true;
-  setStatus(`Loading ${year} events…`);
+  statusEmpty();
   try {
     const resp = await fetch(`/api/events?year=${year}`);
     if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
@@ -127,18 +267,18 @@ async function loadEvents(year) {
       evSel.add(new Option(`${ev.name} (${ev.dates})`, ev.slug));
     }
     evSel.disabled = false;
-    setStatus(`${events.length} events found for ${year}. Pick one to analyze.`);
+    statusEmpty();
   } catch (err) {
     evSel.innerHTML = "<option>—</option>";
-    setStatus(`Could not load events for ${year}: ${err.message}`, true);
+    statusError(`Could not load events for ${year}: ${err.message}`);
   }
 }
 
 async function loadAnalysis() {
   const year = $("year").value;
   const slug = $("event").value;
-  if (!slug) return;
-  setStatus("Fetching and parsing scoresheets… (first load of an event can take a few seconds)");
+  if (!slug) { statusEmpty(); return; }
+  statusLoading("First load of an event can take a few seconds while scoresheets are fetched and parsed.");
   $("results").hidden = true;
   try {
     const resp = await fetch(`/api/analysis?year=${year}&event=${encodeURIComponent(slug)}`);
@@ -146,32 +286,92 @@ async function loadAnalysis() {
     state.data = await resp.json();
     state.enabledDivisions = new Set(state.data.divisions.map((d) => d.name));
     state.selectedJudge = null;
-    setStatus("");
+    state.openGroups = new Set([groupedDivisions()[0]?.[0]]);
+    clearStatus();
     buildChips();
     renderWarnings();
     $("results").hidden = false;
     render();
   } catch (err) {
-    setStatus(`Analysis failed: ${err.message}`, true);
+    statusError(`Analysis failed: ${err.message}`);
   }
 }
 
 function buildChips() {
-  const box = $("division-chips");
+  const groups = groupedDivisions();
+  const total = uniqueDivisions().length;
+  const enabled = uniqueDivisions().filter((d) => state.enabledDivisions.has(d.name)).length;
+  $("division-count").innerHTML = `<strong>${enabled}</strong> of ${total} divisions included`;
+
+  const box = $("division-groups");
   box.innerHTML = "";
-  for (const div of state.data.divisions) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = div.name;
-    btn.setAttribute("aria-pressed", "true");
-    btn.addEventListener("click", () => {
-      const on = btn.getAttribute("aria-pressed") === "true";
-      btn.setAttribute("aria-pressed", String(!on));
-      if (on) state.enabledDivisions.delete(div.name);
-      else state.enabledDivisions.add(div.name);
+  for (const [level, divs] of groups) {
+    const wrap = document.createElement("div");
+    wrap.className = "division-group";
+
+    const enabledInGroup = divs.filter((d) => state.enabledDivisions.has(d.name)).length;
+    const isOpen = state.openGroups.has(level);
+
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "group-header";
+    header.setAttribute("aria-expanded", String(isOpen));
+    header.innerHTML = `
+      <span class="g-name">${escapeHtml(level)}</span>
+      <span class="g-meta"><span>${enabledInGroup}/${divs.length}</span><span class="chevron">›</span></span>
+    `;
+    header.addEventListener("click", () => {
+      if (state.openGroups.has(level)) state.openGroups.delete(level);
+      else state.openGroups.add(level);
+      buildChips();
+    });
+
+    const body = document.createElement("div");
+    body.className = "group-body" + (isOpen ? " open" : "");
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "group-toolbar";
+    const allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.textContent = "All";
+    allBtn.addEventListener("click", () => {
+      for (const d of divs) state.enabledDivisions.add(d.name);
+      buildChips();
       render();
     });
-    box.appendChild(btn);
+    const noneBtn = document.createElement("button");
+    noneBtn.type = "button";
+    noneBtn.textContent = "None";
+    noneBtn.style.marginLeft = "10px";
+    noneBtn.addEventListener("click", () => {
+      for (const d of divs) state.enabledDivisions.delete(d.name);
+      buildChips();
+      render();
+    });
+    toolbar.append(allBtn, noneBtn);
+
+    const chipsRow = document.createElement("div");
+    chipsRow.className = "chips";
+    for (const div of divs) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "chip";
+      btn.textContent = div.name;
+      btn.setAttribute("aria-pressed", String(state.enabledDivisions.has(div.name)));
+      btn.addEventListener("click", () => {
+        const on = btn.getAttribute("aria-pressed") === "true";
+        btn.setAttribute("aria-pressed", String(!on));
+        if (on) state.enabledDivisions.delete(div.name);
+        else state.enabledDivisions.add(div.name);
+        buildChips();
+        render();
+      });
+      chipsRow.appendChild(btn);
+    }
+
+    body.append(toolbar, chipsRow);
+    wrap.append(header, body);
+    box.appendChild(wrap);
   }
 }
 
@@ -274,7 +474,15 @@ function renderDetail(rows) {
   card.hidden = false;
 
   const pal = palette();
-  $("detail-title").textContent = `${row.judge} — individual marks (${row.n})`;
+  $("detail-title").textContent = row.judge;
+
+  const rank = rows.findIndex((r) => r.judge === state.selectedJudge) + 1;
+  $("detail-badges").innerHTML = `
+    <span class="badge rank">Rank <strong>#${rank}</strong> of ${rows.length}</span>
+    <span class="badge">Score <strong>${row.score.toFixed(3)}</strong></span>
+    <span class="badge"><strong>${row.n}</strong> marks</span>
+    <span class="badge">Worst <strong>${row.worst.toFixed(3)}</strong></span>
+  `;
 
   const divisions = [...new Set(row.points.map((p) => p.division))];
   const jitter = () => (Math.random() - 0.5) * 0.5;
@@ -294,9 +502,9 @@ function renderDetail(rows) {
     data: pts,
     backgroundColor: color,
     borderColor: pal.surface,
-    borderWidth: 1,
-    pointRadius: 5,
-    pointHoverRadius: 7,
+    borderWidth: 1.5,
+    pointRadius: 6,
+    pointHoverRadius: 8,
   });
 
   if (state.detailChart) state.detailChart.destroy();
