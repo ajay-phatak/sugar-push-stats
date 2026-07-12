@@ -20,6 +20,8 @@ const state = {
   mainChart: null,
   detailChart: null,
   openGroups: new Set(),
+  hideLowSample: false,
+  view: "judge",        // "judge" | "division"
 };
 
 /* ---------- palette (read from CSS so light/dark stays in style.css) ---------- */
@@ -76,6 +78,54 @@ function judgeScores() {
       nPrelims: pts.filter((p) => p.round === "prelims").length,
       worst: Math.max(...ds),
       points: pts,
+    });
+  }
+  rows.sort((a, b) => a.score - b.score);
+  return rows;
+}
+
+// On narrow screens long y-axis labels would eat half the plot width; the
+// tooltip still carries the full name.
+function yTickLabel(chart, value) {
+  const label = chart.getLabelForValue(value);
+  if (window.innerWidth >= 640 || label.length <= 20) return label;
+  return label.slice(0, 19) + "…";
+}
+
+function median(nums) {
+  const s = nums.slice().sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+// Hides judges with fewer than half the median mark count (min 5). If that
+// would hide every judge, the filter is ignored and everyone is shown.
+function applyLowSampleFilter(rows) {
+  if (!state.hideLowSample || !rows.length) return { rows, hiddenCount: 0, active: false };
+  const threshold = Math.max(5, Math.floor(0.5 * median(rows.map((r) => r.n))));
+  const filtered = rows.filter((r) => r.n >= threshold);
+  if (!filtered.length) return { rows, hiddenCount: 0, active: false };
+  return { rows: filtered, hiddenCount: rows.length - filtered.length, active: true };
+}
+
+function divisionScores() {
+  const byDiv = new Map();
+  for (const p of filteredDeviations()) {
+    if (!byDiv.has(p.division)) byDiv.set(p.division, { name: p.division, points: [], judges: new Set(), round: p.round });
+    const entry = byDiv.get(p.division);
+    entry.points.push(p);
+    entry.judges.add(p.judge);
+    if (p.round === "finals") entry.round = "finals"; // mixed divisions count as finals
+  }
+  const rows = [];
+  for (const [, entry] of byDiv) {
+    const ds = entry.points.map((p) => p.deviation);
+    rows.push({
+      name: entry.name,
+      round: entry.round,
+      score: aggregate(ds, state.method),
+      judgeCount: entry.judges.size,
+      n: entry.points.length,
     });
   }
   rows.sort((a, b) => a.score - b.score);
@@ -143,6 +193,19 @@ function initControls() {
     render();
   });
   $("method-note").textContent = METHOD_NOTES[state.method];
+
+  wireSegmented($("view-toggle"), (val) => {
+    state.view = val;
+    render();
+  });
+
+  $("hide-low-sample").addEventListener("click", () => {
+    const btn = $("hide-low-sample");
+    const on = btn.getAttribute("aria-pressed") === "true";
+    state.hideLowSample = !on;
+    btn.setAttribute("aria-pressed", String(!on));
+    render();
+  });
 
   const infoBtn = $("method-info-btn");
   const explainer = $("method-explainer");
@@ -394,13 +457,41 @@ function renderWarnings() {
 
 function render() {
   if (!state.data) return;
-  const rows = judgeScores();
+  if (state.view === "division") {
+    renderDivisionView();
+  } else {
+    renderJudgeView();
+  }
+}
+
+function renderJudgeView() {
+  $("division-legend").hidden = true;
+  $("low-sample-tools").hidden = false;
+  $("chart-hint").textContent = "Click a bar to see that judge's individual marks.";
+
+  const allRows = judgeScores();
+  const { rows, hiddenCount, active } = applyLowSampleFilter(allRows);
+
   renderMainChart(rows);
   renderTable(rows);
+
+  $("hidden-count").textContent = active && hiddenCount ? `· ${hiddenCount} hidden` : "";
+
   if (state.selectedJudge && !rows.some((r) => r.judge === state.selectedJudge)) {
     state.selectedJudge = null;
   }
   renderDetail(rows);
+}
+
+function renderDivisionView() {
+  $("low-sample-tools").hidden = true;
+  $("chart-hint").textContent = "";
+  state.selectedJudge = null;
+  renderDetail([]);
+
+  const divRows = divisionScores();
+  renderDivisionChart(divRows);
+  renderTable(divRows);
 }
 
 function renderMainChart(rows) {
@@ -410,6 +501,7 @@ function renderMainChart(rows) {
   $("main-title").textContent =
     `Judge consensus scores — ${state.data.event_name} ${state.data.year}` +
     (state.rounds === "all" ? " (finals + prelims)" : " (finals only)");
+  $("main-note").textContent = "Lower = closer to the official outcome. Score is the weighted average deviation, normalized so different field sizes compare fairly.";
 
   if (state.mainChart) state.mainChart.destroy();
   state.mainChart = new Chart($("main-chart"), {
@@ -460,11 +552,91 @@ function renderMainChart(rows) {
         y: {
           grid: { display: false },
           border: { color: pal.baseline },
-          ticks: { color: pal.textSecondary, autoSkip: false },
+          ticks: {
+            color: pal.textSecondary,
+            autoSkip: false,
+            callback(value) { return yTickLabel(this.chart.scales.y, value); },
+          },
         },
       },
     },
   });
+}
+
+function renderDivisionChart(divRows) {
+  const pal = palette();
+  const box = $("main-chart").parentElement;
+  box.style.height = `${Math.max(divRows.length * 32 + 70, 160)}px`;
+  $("main-title").textContent = `Division consensus — ${state.data.event_name} ${state.data.year}`;
+  $("main-note").textContent = "Lower = judges agreed more on this division's marks; higher = the panel's marks were more scattered.";
+
+  const hasFinals = divRows.some((d) => d.round === "finals");
+  const hasPrelims = divRows.some((d) => d.round === "prelims");
+
+  if (state.mainChart) state.mainChart.destroy();
+  state.mainChart = new Chart($("main-chart"), {
+    type: "bar",
+    data: {
+      labels: divRows.map((d) => d.name),
+      datasets: [{
+        data: divRows.map((d) => d.score),
+        backgroundColor: divRows.map((d) => (d.round === "prelims" ? pal.series2 : pal.series1)),
+        borderRadius: 4,
+        barThickness: 14,
+      }],
+    },
+    options: {
+      indexAxis: "y",
+      maintainAspectRatio: false,
+      animation: { duration: 200 },
+      onClick() {}, // division bars aren't interactive
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const d = divRows[ctx.dataIndex];
+              return `score ${d.score.toFixed(3)} · ${d.judgeCount} judges · ${d.n} marks`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          title: { display: true, text: "average weighted deviation across all judges (lower = more agreement)", color: pal.muted, font: { size: 11 } },
+          grid: { color: pal.grid },
+          border: { color: pal.baseline },
+          ticks: { color: pal.muted },
+        },
+        y: {
+          grid: { display: false },
+          border: { color: pal.baseline },
+          ticks: {
+            color: pal.textSecondary,
+            autoSkip: false,
+            callback(value) { return yTickLabel(this.chart.scales.y, value); },
+          },
+        },
+      },
+    },
+  });
+
+  const legend = $("division-legend");
+  legend.innerHTML = "";
+  if (hasFinals && hasPrelims) {
+    legend.hidden = false;
+    for (const [label, color] of [["Finals", pal.series1], ["Prelims", pal.series2]]) {
+      const span = document.createElement("span");
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = color;
+      span.append(sw, label);
+      legend.appendChild(span);
+    }
+  } else {
+    legend.hidden = true;
+  }
 }
 
 function renderDetail(rows) {
@@ -553,7 +725,12 @@ function renderDetail(rows) {
             color: pal.textSecondary,
             autoSkip: false,
             stepSize: 1,
-            callback: (v) => Number.isInteger(v) ? (divisions[v] ?? "") : "",
+            callback: (v) => {
+              if (!Number.isInteger(v)) return "";
+              const label = divisions[v] ?? "";
+              if (window.innerWidth >= 640 || label.length <= 20) return label;
+              return label.slice(0, 19) + "…";
+            },
           },
         },
       },
@@ -575,8 +752,27 @@ function renderDetail(rows) {
 }
 
 function renderTable(rows) {
-  const tbody = $("score-table").querySelector("tbody");
+  const table = $("score-table");
+  const thead = table.querySelector("thead");
+  const tbody = table.querySelector("tbody");
   tbody.innerHTML = "";
+
+  if (state.view === "division") {
+    thead.innerHTML = "<tr><th>Division</th><th>Round</th><th>Score</th><th>Judges</th><th>Marks</th></tr>";
+    for (const d of rows) {
+      const tr = document.createElement("tr");
+      const vals = [d.name, d.round === "prelims" ? "Prelims" : "Finals", d.score.toFixed(3), d.judgeCount, d.n];
+      for (const val of vals) {
+        const td = document.createElement("td");
+        td.textContent = String(val);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    return;
+  }
+
+  thead.innerHTML = "<tr><th>Judge</th><th>Score</th><th>Marks</th><th>Finals marks</th><th>Prelims marks</th><th>Worst deviation</th></tr>";
   for (const r of rows) {
     const tr = document.createElement("tr");
     for (const val of [r.judge, r.score.toFixed(3), r.n, r.nFinals, r.nPrelims, r.worst.toFixed(3)]) {

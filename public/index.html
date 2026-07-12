@@ -86,10 +86,19 @@
     </div>
 
     <div class="card">
+      <div class="segmented" role="group" aria-label="View" id="view-toggle">
+        <button type="button" data-value="judge" aria-pressed="true">By judge</button>
+        <button type="button" data-value="division" aria-pressed="false">By division</button>
+      </div>
       <h2 id="main-title">Judge consensus scores</h2>
-      <p class="card-note">Lower = closer to the official outcome. Score is the weighted average deviation, normalized so different field sizes compare fairly.</p>
+      <p class="card-note" id="main-note">Lower = closer to the official outcome. Score is the weighted average deviation, normalized so different field sizes compare fairly.</p>
+      <div class="main-card-tools" id="low-sample-tools">
+        <button type="button" class="chip" id="hide-low-sample" aria-pressed="false" title="Hides judges with fewer than half the median number of marks (min 5)">Hide low-sample judges</button>
+        <span class="hidden-note" id="hidden-count"></span>
+      </div>
       <div class="chart-box"><canvas id="main-chart" role="img" aria-label="Bar chart of judge consensus scores"></canvas></div>
-      <p class="chart-hint">Click a bar to see that judge's individual marks.</p>
+      <div class="legend" id="division-legend" hidden></div>
+      <p class="chart-hint" id="chart-hint">Click a bar to see that judge's individual marks.</p>
     </div>
 
     <div class="card spotlight" id="detail-card" hidden>
@@ -107,10 +116,12 @@
 
     <details class="card table-card">
       <summary>Data table</summary>
-      <table id="score-table">
-        <thead><tr><th>Judge</th><th>Score</th><th>Marks</th><th>Finals marks</th><th>Prelims marks</th><th>Worst deviation</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="table-scroll">
+        <table id="score-table">
+          <thead><tr><th>Judge</th><th>Score</th><th>Marks</th><th>Finals marks</th><th>Prelims marks</th><th>Worst deviation</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </details>
 
     <div id="warnings" class="warnings"></div>

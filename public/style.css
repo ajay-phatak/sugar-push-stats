@@ -354,6 +354,18 @@ header.masthead { margin-bottom: 22px; }
 .chart-box { position: relative; width: 100%; }
 .chart-hint { font-size: 0.74rem; color: var(--muted); margin: 8px 0 0; }
 
+#view-toggle { margin-bottom: 12px; }
+
+.main-card-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.main-card-tools[hidden] { display: none; }
+.hidden-note { font-size: 0.78rem; color: var(--muted); }
+
 /* ---------- judge spotlight ---------- */
 
 .spotlight { border-top: 4px solid var(--series-1); }
@@ -398,6 +410,7 @@ header.masthead { margin-bottom: 22px; }
 .icon-btn:hover { border-color: var(--series-1); color: var(--series-1); }
 
 .legend { display: flex; gap: 16px; margin-top: 10px; font-size: 0.8rem; color: var(--text-secondary); }
+.legend[hidden] { display: none; }
 .legend .swatch {
   display: inline-block;
   width: 10px; height: 10px;
@@ -414,7 +427,8 @@ header.masthead { margin-bottom: 22px; }
   color: var(--text-secondary);
   font-weight: 600;
 }
-#score-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.85rem; }
+.table-scroll { width: 100%; overflow-x: auto; margin-top: 12px; -webkit-overflow-scrolling: touch; }
+#score-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 #score-table th {
   text-align: left;
   color: var(--muted);
@@ -440,13 +454,28 @@ footer p { font-size: 0.78rem; color: var(--muted); margin-top: 28px; line-heigh
 /* ---------- mobile ---------- */
 
 @media (max-width: 640px) {
-  .viz-root { padding: 22px 14px 40px; }
-  .deck-row { gap: 12px 16px; }
-  .field { min-width: 0; flex: 1 1 140px; }
-  .field select { min-width: 0; width: 100%; }
-  .segmented { width: 100%; }
-  .segmented button { flex: 1; padding: 8px 6px; }
+  .viz-root { padding: 22px 14px 40px; overflow-x: hidden; }
+  .wordmark { font-size: clamp(1.9rem, 9vw, 2.6rem); }
+  .control-deck { padding: 14px 14px 12px; }
+  .deck-row { flex-direction: column; align-items: stretch; gap: 12px; }
+  .field { min-width: 0; width: 100%; flex: 1 1 auto; }
+  .field select { min-width: 0; width: 100%; max-width: none; }
+  .segmented { width: 100%; flex-wrap: wrap; }
+  .segmented button { flex: 1 1 auto; padding: 8px 6px; white-space: normal; text-align: center; }
   .card { padding: 16px 14px; }
+  .card h2 { font-size: 1.1rem; }
+  .division-panel { padding: 12px 14px 14px; }
   .spotlight-head { flex-direction: column; }
   .icon-btn { align-self: flex-end; }
+  .spotlight-badges { gap: 6px; }
+  .main-card-tools { gap: 8px; }
+  .chips .chip { max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #view-toggle.segmented button, #rounds-toggle.segmented button { white-space: nowrap; }
+}
+
+@media (max-width: 400px) {
+  .wordmark { font-size: 1.7rem; }
+  .card h2 { font-size: 1rem; }
+  #method-toggle button { flex-basis: 48%; }
+  .chips .chip { max-width: 48vw; }
 }
