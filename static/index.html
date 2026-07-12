@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sugar-push-stats — WCS judge statistics</title>
+<link rel="stylesheet" href="style.css">
+<script src="chart.umd.js"></script>
+</head>
+<body>
+<div class="viz-root">
+  <header>
+    <h1>sugar-push-stats</h1>
+    <p class="subtitle">How closely each judge's marks track the official results, from <a href="https://eepro.com/results/" target="_blank" rel="noopener">eepro.com</a> scoresheets.</p>
+  </header>
+
+  <section class="controls" aria-label="Filters">
+    <label>Year
+      <select id="year"></select>
+    </label>
+    <label>Event
+      <select id="event" disabled><option>Pick a year…</option></select>
+    </label>
+    <label>Rounds
+      <select id="rounds">
+        <option value="finals">Finals only</option>
+        <option value="all">Finals + Prelims</option>
+      </select>
+    </label>
+    <label>Outlier weighting
+      <select id="method">
+        <option value="linear">Linear</option>
+        <option value="logarithmic">Logarithmic</option>
+        <option value="exponential">Exponential</option>
+      </select>
+    </label>
+  </section>
+  <p class="method-note" id="method-note"></p>
+
+  <div id="status" class="status" hidden></div>
+
+  <section id="results" hidden>
+    <div class="chips" id="division-chips" aria-label="Divisions included"></div>
+
+    <div class="card">
+      <h2 id="main-title">Judge consensus scores</h2>
+      <p class="card-note">Lower = closer to the official outcome. Click a bar to see that judge's individual marks. Score is the weighted average deviation, normalized so different field sizes compare fairly.</p>
+      <div class="chart-box"><canvas id="main-chart" role="img" aria-label="Bar chart of judge consensus scores"></canvas></div>
+    </div>
+
+    <div class="card" id="detail-card" hidden>
+      <h2 id="detail-title"></h2>
+      <p class="card-note">Each dot is one mark: how far it landed from the official result (0 = exact agreement, 1 = maximal disagreement). Hover a dot for the competitor.</p>
+      <div class="chart-box"><canvas id="detail-chart" role="img" aria-label="Strip plot of individual mark deviations"></canvas></div>
+      <div class="legend" id="detail-legend"></div>
+    </div>
+
+    <details class="card table-card">
+      <summary>Data table</summary>
+      <table id="score-table">
+        <thead><tr><th>Judge</th><th>Score</th><th>Marks</th><th>Finals marks</th><th>Prelims marks</th><th>Worst deviation</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </details>
+
+    <div id="warnings" class="warnings"></div>
+  </section>
+
+  <footer>
+    <p>Deviation = distance between a judge's mark and the official result (final placement, or promotion in prelims), scaled to [0,1]. Not a judgment of judging quality — small panels and strong fields disagree honestly.</p>
+  </footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
