@@ -5,7 +5,9 @@ pages get a long TTL; current-year pages a short one (events post results
 incrementally over a weekend).
 """
 
+import os
 import re
+import tempfile
 import time
 from datetime import date
 from pathlib import Path
@@ -13,7 +15,14 @@ from pathlib import Path
 import httpx
 
 BASE_URL = "https://eepro.com/results"
-CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache"
+
+# On Vercel the project filesystem is read-only; /tmp survives across warm
+# invocations, which is all this cache needs (it's an optimization — the CDN
+# caches whole API responses above it).
+if os.environ.get("VERCEL"):
+    CACHE_DIR = Path(tempfile.gettempdir()) / "sugar-push-stats-cache"
+else:
+    CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache"
 
 SHORT_TTL = 60 * 30  # 30 min, current-year pages
 LONG_TTL = 60 * 60 * 24 * 30  # 30 days, past-year pages

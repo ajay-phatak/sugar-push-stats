@@ -1,6 +1,7 @@
+from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import analysis, parser, scraper
@@ -8,11 +9,20 @@ from .models import AnalysisResponse, Event
 
 app = FastAPI(title="sugar-push-stats")
 
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+STATIC_DIR = Path(__file__).resolve().parent.parent / "public"
+
+
+def _cdn_cache(response: Response, year: int) -> None:
+    """Let Vercel's CDN cache API responses: past-year results are immutable,
+    current-year events are still being posted. No effect when self-hosted."""
+    if year < date.today().year:
+        response.headers["Cache-Control"] = "s-maxage=604800, stale-while-revalidate=86400"
+    else:
+        response.headers["Cache-Control"] = "s-maxage=1800, stale-while-revalidate=86400"
 
 
 @app.get("/api/events", response_model=list[Event])
-def list_events(year: int) -> list[Event]:
+def list_events(year: int, response: Response) -> list[Event]:
     if not 2000 <= year <= 2100:
         raise HTTPException(400, "year out of range")
     try:
@@ -22,11 +32,12 @@ def list_events(year: int) -> list[Event]:
     events = parser.parse_year_index(html, year)
     if not events:
         raise HTTPException(404, f"No events found for {year}")
+    _cdn_cache(response, year)
     return events
 
 
 @app.get("/api/analysis", response_model=AnalysisResponse)
-def analyze_event(year: int, event: str) -> AnalysisResponse:
+def analyze_event(year: int, event: str, response: Response) -> AnalysisResponse:
     try:
         index_html = scraper.fetch(f"{year}/", year)
     except scraper.FetchError as e:
@@ -56,6 +67,7 @@ def analyze_event(year: int, event: str) -> AnalysisResponse:
     if not deviations:
         raise HTTPException(404, f"No judge marks could be parsed for '{ev.name}'")
 
+    _cdn_cache(response, year)
     return AnalysisResponse(
         year=year,
         event=ev.slug,
@@ -66,4 +78,8 @@ def analyze_event(year: int, event: str) -> AnalysisResponse:
     )
 
 
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+# Local/self-hosted serving; on Vercel the CDN serves public/ directly and
+# only /api/* reaches this app (and the directory may be absent from the
+# function bundle, hence the guard).
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

@@ -24,7 +24,7 @@ CORS headers, so the browser can't fetch them directly). Raw deviations are
 sent to the frontend, which does all weighting/filtering client-side — so
 switching method, rounds, or divisions re-renders instantly.
 
-## Running
+## Running locally
 
 ```
 python -m venv .venv
@@ -34,10 +34,19 @@ python -m venv .venv
 
 Then open http://localhost:8210/.
 
+## Deploying (Vercel)
+
+The repo is Vercel-ready with framework preset "Other" and no build command:
+`public/` is served as static files by the CDN, and `vercel.json` rewrites
+`/api/*` to the FastAPI function at `api/index.py`. The page cache lives in
+`/tmp` there, and API responses carry `s-maxage` headers so the CDN caches
+them (a week for past years, 30 minutes for the current year).
+
 ## Layout
 
-- `app/scraper.py` — fetch + disk cache (`data/cache/`)
+- `app/scraper.py` — fetch + disk cache (`data/cache/`, or `/tmp` on Vercel)
 - `app/parser.py` — BeautifulSoup parsing of index/finals/prelims pages
 - `app/analysis.py` — deviation math
-- `app/main.py` — API (`/api/events`, `/api/analysis`) + static hosting
-- `static/` — vanilla JS + vendored Chart.js frontend
+- `app/main.py` — API (`/api/events`, `/api/analysis`) + local static hosting
+- `api/index.py` — Vercel serverless entry point
+- `public/` — vanilla JS + vendored Chart.js frontend
