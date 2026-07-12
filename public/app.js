@@ -9,7 +9,18 @@ const METHOD_NOTES = {
   exponential: "Exponential (RMS): wild outlier marks are punished hardest.",
 };
 
-const LEVEL_ORDER = ["Newcomer", "Novice", "Intermediate", "Advanced", "All-Star", "Champion", "Junior", "Masters", "Pro"];
+// Only the main WSDC levels get their own chip groups; everything else
+// (Masters, Sophisticated, Juniors, Pro-Am, All American, routines, ...)
+// falls into "Other".
+const LEVEL_ORDER = ["Newcomer", "Novice", "Intermediate", "Advanced", "All-Star", "Champions"];
+const LEVEL_KEYWORDS = {
+  "Newcomer": ["newcomer"],
+  "Novice": ["novice"],
+  "Intermediate": ["intermediate"],
+  "Advanced": ["advanced"],
+  "All-Star": ["all star", "all-star", "allstar"],
+  "Champions": ["champion", "invitational"],
+};
 
 const state = {
   data: null,          // AnalysisResponse from the API
@@ -135,8 +146,12 @@ function divisionScores() {
 /* ---------- division grouping ---------- */
 
 function levelOf(name) {
+  const n = name.toLowerCase();
+  // Pro-Am divisions mention a level ("Pro-Am ... Intermediate ...") but
+  // belong in Other, so check for them before the level keywords.
+  if (/pro-?\s?am/.test(n)) return "Other";
   for (const lvl of LEVEL_ORDER) {
-    if (name.toLowerCase().includes(lvl.toLowerCase())) return lvl;
+    if (LEVEL_KEYWORDS[lvl].some((k) => n.includes(k))) return lvl;
   }
   return "Other";
 }
@@ -354,7 +369,7 @@ async function loadAnalysis() {
     state.data = await resp.json();
     state.enabledDivisions = new Set(state.data.divisions.map((d) => d.name));
     state.selectedJudge = null;
-    state.openGroups = new Set([groupedDivisions()[0]?.[0]]);
+    state.openGroups = new Set(); // all chip groups start collapsed
     clearStatus();
     buildChips();
     renderWarnings();
