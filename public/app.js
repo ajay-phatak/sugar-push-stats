@@ -260,8 +260,31 @@ function initControls() {
     renderDetail(judgeScores());
   });
 
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+  initThemeToggle();
   loadEvents(thisYear);
+}
+
+/* The head script resolves data-theme before first paint; this button flips
+   it, persists the choice, and re-renders the charts (they read colors from
+   the CSS variables at draw time). */
+function initThemeToggle() {
+  const btn = $("theme-toggle");
+  const apply = (theme) => {
+    document.documentElement.dataset.theme = theme;
+    btn.textContent = theme === "dark" ? "☀" : "☾";
+    btn.setAttribute("aria-label", theme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+    render();
+  };
+  btn.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    localStorage.setItem("theme", next);
+    apply(next);
+  });
+  // While no explicit choice is stored, keep following the system setting.
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+    if (!localStorage.getItem("theme")) apply(e.matches ? "dark" : "light");
+  });
+  apply(document.documentElement.dataset.theme || "light");
 }
 
 function wireSegmented(container, onChange) {

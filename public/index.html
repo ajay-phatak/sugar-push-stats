@@ -8,13 +8,26 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<script>
+/* Resolve the theme before first paint: stored choice wins, else system. */
+(function () {
+  var saved = localStorage.getItem("theme");
+  var theme = saved === "light" || saved === "dark"
+    ? saved
+    : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = theme;
+})();
+</script>
 <link rel="stylesheet" href="style.css">
 <script src="chart.umd.js"></script>
 </head>
 <body>
 <div class="viz-root">
   <header class="masthead">
-    <h1 class="wordmark">Sugar Push Stats<span class="accent-dot">.</span></h1>
+    <div class="masthead-top">
+      <h1 class="wordmark">Sugar Push Stats<span class="accent-dot">.</span></h1>
+      <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="Switch to dark mode">☾</button>
+    </div>
     <div class="rule"></div>
     <p class="subtitle">How closely each judge's marks track the official results, from <a href="https://eepro.com/results/" target="_blank" rel="noopener">eepro.com</a> scoresheets.</p>
   </header>

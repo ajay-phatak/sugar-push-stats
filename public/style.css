@@ -1,6 +1,8 @@
 /* sugar-push-stats — warm/analog "gig poster" theme.
-   Palette roles unchanged in name from the original build; light/dark swap here only. */
-.viz-root {
+   Palette roles unchanged in name from the original build; light/dark swap here only.
+   Vars live on :root (not .viz-root) so the body background themes too; a head
+   script resolves data-theme from localStorage/system before first paint. */
+:root {
   --page: oklch(95% 0.018 75);
   --surface-1: oklch(98.5% 0.008 80);
   --surface-2: oklch(93% 0.02 70);
@@ -18,8 +20,7 @@
   --radius: 14px;
   --shadow: 0 1px 2px oklch(20% 0.02 50 / 0.06), 0 6px 20px oklch(20% 0.02 50 / 0.05);
 }
-@media (prefers-color-scheme: dark) {
-  .viz-root {
+:root[data-theme="dark"] {
     --page: oklch(16% 0.015 50);
     --surface-1: oklch(21% 0.016 50);
     --surface-2: oklch(26% 0.018 50);
@@ -35,8 +36,9 @@
     --series-2-soft: oklch(68% 0.15 200 / 0.18);
     --danger: oklch(70% 0.17 25);
     --shadow: 0 1px 2px oklch(0% 0 0 / 0.3), 0 8px 24px oklch(0% 0 0 / 0.35);
-  }
 }
+:root[data-theme="dark"] { color-scheme: dark; }
+:root[data-theme="light"] { color-scheme: light; }
 
 @font-face {
   font-family: "Big Shoulders Display";
@@ -61,6 +63,13 @@ body { background: var(--page); }
 /* ---------- header ---------- */
 
 header.masthead { margin-bottom: 22px; }
+.masthead-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.masthead-top .icon-btn { align-self: flex-start; margin-top: 6px; }
 .wordmark {
   font-family: "Big Shoulders Display", system-ui, sans-serif;
   font-weight: 700;
