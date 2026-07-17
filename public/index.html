@@ -140,6 +140,25 @@
     <div id="warnings" class="warnings"></div>
   </section>
 
+  <div class="card marauder" id="marauder-card" hidden>
+    <div class="spotlight-head">
+      <div class="spotlight-title">
+        <h2>The Marauder's Map</h2>
+      </div>
+      <button type="button" class="chip" id="mischief-managed">Mischief managed</button>
+    </div>
+    <div class="marauder-disclaimer">
+      <p><strong>Use this responsibly.</strong> Judges mark whole fields in seconds, panels are small, and a handful of marks is statistical noise — a judge who "marked you down" at one event may simply have seen a different 20 seconds of your dancing. This view is for satisfying curiosity, not for holding grudges, lobbying judges, or deciding whom to dance in front of. If you find yourself checking it before every comp, close the map.</p>
+    </div>
+    <p class="card-note">Type a competitor's name to see which judges' marks were most and least favorable to them, relative to the official results — across every round and division of the loaded event, regardless of the filters above.</p>
+    <div class="field marauder-field">
+      <label for="marauder-name">Competitor name</label>
+      <input type="text" id="marauder-name" list="marauder-names" placeholder="e.g. first and last name" autocomplete="off">
+      <datalist id="marauder-names"></datalist>
+    </div>
+    <div id="marauder-results"></div>
+  </div>
+
   <footer>
     <p>Deviation = distance between a judge's mark and the official result (final placement, or promotion in prelims), scaled to [0,1]. Not a judgment of judging quality — small panels and strong fields disagree honestly.</p>
   </footer>

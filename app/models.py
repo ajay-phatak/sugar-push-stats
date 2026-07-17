@@ -19,6 +19,7 @@ class DeviationPoint(BaseModel):
     division: str
     round: str  # "finals" | "prelims"
     deviation: float  # normalized to [0, 1]
+    signed: float  # normalized to [-1, 1]; + = judge marked better than the outcome, - = worse
     detail: str
 
 

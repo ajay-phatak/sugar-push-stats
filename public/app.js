@@ -33,6 +33,8 @@ const state = {
   openGroups: new Set(),
   hideLowSample: false,
   view: "judge",        // "judge" | "division"
+  marauder: false,      // Marauder's Map card revealed?
+  marauderName: "",
 };
 
 /* ---------- palette (read from CSS so light/dark stays in style.css) ---------- */
@@ -260,8 +262,146 @@ function initControls() {
     renderDetail(judgeScores());
   });
 
+  $("marauder-name").addEventListener("input", (e) => {
+    state.marauderName = e.target.value;
+    renderMarauder();
+  });
+  $("mischief-managed").addEventListener("click", () => {
+    state.marauder = false;
+    $("marauder-card").hidden = true;
+  });
+
   initThemeToggle();
+  initMarauderTrigger();
   loadEvents(thisYear);
+}
+
+/* ---------- the Marauder's Map (hidden easter egg) ---------- */
+
+// Typing this phrase anywhere on the page reveals a hidden card that ranks
+// judges by how favorably they marked a given competitor. Not linked from any
+// visible UI on purpose — stays secret across reloads (no localStorage).
+const MARAUDER_PHRASE = "i solemnly swear that i am up to no good";
+
+function initMarauderTrigger() {
+  let buffer = "";
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key.length !== 1) return; // printable characters only, no Shift/Tab/etc.
+    buffer = (buffer + e.key.toLowerCase()).slice(-60);
+    if (buffer.endsWith(MARAUDER_PHRASE)) {
+      buffer = "";
+      state.marauder = true;
+      $("marauder-card").hidden = false;
+      renderMarauder();
+      $("marauder-card").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+}
+
+// Unique individual competitor names for the datalist. Couples are written
+// "Alice Smith and Bob Jones" (or "... & ...") — split on the separator so
+// both partners are searchable. The spaces around "and" keep names like
+// "Alexandra" intact.
+function buildMarauderNames() {
+  const seen = new Map(); // lowercase -> first-seen display casing
+  for (const p of state.data.deviations) {
+    for (const part of p.competitor.split(/\s+(?:and|&)\s+/i)) {
+      const name = part.trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      if (!seen.has(key)) seen.set(key, name);
+    }
+  }
+  const sorted = [...seen.values()].sort((a, b) => a.localeCompare(b));
+  const list = $("marauder-names");
+  list.innerHTML = "";
+  for (const name of sorted) list.appendChild(new Option(name));
+}
+
+function marauderFavorSpan(favor) {
+  const cls = favor > 0 ? "favor-pos" : favor < 0 ? "favor-neg" : "";
+  const sign = favor > 0 ? "+" : favor < 0 ? "−" : "";
+  return `<span class="favor ${cls}">${sign}${Math.abs(favor).toFixed(3)}</span>`;
+}
+
+function marauderJudgeList(rows) {
+  return `
+    <ul class="marauder-judge-list">
+      ${rows.map((r) => `
+        <li>
+          <span class="mj-name">${escapeHtml(r.judge)}</span>
+          ${marauderFavorSpan(r.favor)}
+          <span class="mj-n">${r.n} mark${r.n === 1 ? "" : "s"}</span>
+        </li>
+      `).join("")}
+    </ul>
+  `;
+}
+
+function renderMarauder() {
+  const box = $("marauder-results");
+  if (!state.data) {
+    box.innerHTML = `<p class="card-note">Pick a year and event above first.</p>`;
+    return;
+  }
+
+  const query = state.marauderName.trim();
+  if (query.length < 3) {
+    box.innerHTML = "";
+    return;
+  }
+  const q = query.toLowerCase();
+  const matched = state.data.deviations.filter((p) => p.competitor.toLowerCase().includes(q));
+  if (!matched.length) {
+    box.innerHTML = `<p class="card-note">No competitor matching that name in this event.</p>`;
+    return;
+  }
+
+  // Older cached API responses may predate the "signed" field.
+  const withSigned = matched.filter((p) => p.signed !== undefined && p.signed !== null);
+  if (!withSigned.length) {
+    box.innerHTML = `<p class="card-note">This event's data is from an older cached version — try again later.</p>`;
+    return;
+  }
+
+  const byJudge = new Map();
+  for (const p of withSigned) {
+    if (!byJudge.has(p.judge)) byJudge.set(p.judge, []);
+    byJudge.get(p.judge).push(p);
+  }
+  const judgeRows = [];
+  for (const [judge, pts] of byJudge) {
+    judgeRows.push({
+      judge,
+      favor: pts.reduce((s, p) => s + p.signed, 0) / pts.length,
+      n: pts.length,
+      points: pts,
+    });
+  }
+  judgeRows.sort((a, b) => b.favor - a.favor);
+
+  const distinctCompetitors = [...new Set(withSigned.map((p) => p.competitor))];
+  const summary = `<strong>${withSigned.length} mark${withSigned.length === 1 ? "" : "s"}</strong> matched "${escapeHtml(query)}" ` +
+    `across ${judgeRows.length} judge${judgeRows.length === 1 ? "" : "s"} (${distinctCompetitors.map((c) => escapeHtml(c)).join(", ")})`;
+
+  const top3 = judgeRows.slice(0, 3);
+  const bottom3 = judgeRows.slice(-3).reverse();
+
+  box.innerHTML = `
+    <p class="card-note">${summary}</p>
+    <div class="marauder-lists">
+      <div>
+        <h3 class="marauder-list-title">Most favorable</h3>
+        ${marauderJudgeList(top3)}
+      </div>
+      <div>
+        <h3 class="marauder-list-title">Least favorable</h3>
+        ${marauderJudgeList(bottom3)}
+      </div>
+    </div>
+    <p class="marauder-footnote">Favor = average signed deviation from the official result: + means the judge marked them better than they placed, − worse. Values near 0 mean the judge agreed with the outcome.</p>
+  `;
 }
 
 /* The head script resolves data-theme before first paint; this button flips
@@ -396,6 +536,8 @@ async function loadAnalysis() {
     clearStatus();
     buildChips();
     renderWarnings();
+    buildMarauderNames();
+    renderMarauder();
     $("results").hidden = false;
     render();
   } catch (err) {

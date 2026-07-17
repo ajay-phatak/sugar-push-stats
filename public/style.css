@@ -113,7 +113,7 @@ header.masthead { margin-bottom: 22px; }
   text-transform: uppercase;
   color: var(--muted);
 }
-.field select {
+.field select, .field input[type="text"] {
   font: inherit;
   font-size: 0.92rem;
   color: var(--text-primary);
@@ -124,7 +124,7 @@ header.masthead { margin-bottom: 22px; }
   min-width: 150px;
   max-width: 340px;
 }
-.field select:focus-visible, .segmented button:focus-visible, .chip:focus-visible,
+.field select:focus-visible, .field input[type="text"]:focus-visible, .segmented button:focus-visible, .chip:focus-visible,
 .group-header:focus-visible, .info-toggle:focus-visible, .icon-btn:focus-visible {
   outline: 2px solid var(--series-1);
   outline-offset: 2px;
@@ -458,6 +458,54 @@ header.masthead { margin-bottom: 22px; }
 .warnings { font-size: 0.8rem; color: var(--muted); }
 .warnings p { margin: 4px 0; }
 
+/* ---------- the Marauder's Map ---------- */
+
+.marauder { border-top: 4px solid var(--danger); }
+
+.marauder-disclaimer {
+  background: color-mix(in oklch, var(--danger) 10%, var(--surface-2));
+  border: 1px solid color-mix(in oklch, var(--danger) 35%, var(--border));
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 4px 0 14px;
+}
+.marauder-disclaimer p { margin: 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
+
+.marauder-field { margin: 4px 0 4px; }
+
+.marauder-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 14px 0 10px;
+}
+.marauder-list-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.marauder-judge-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.marauder-judge-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--baseline);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+.marauder-judge-list .mj-name { color: var(--text-primary); font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.marauder-judge-list .favor { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text-secondary); }
+.marauder-judge-list .favor-pos { color: var(--series-1); }
+.marauder-judge-list .favor-neg { color: var(--danger); }
+.marauder-judge-list .mj-n { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+.marauder-footnote { margin: 4px 0 0; font-size: 0.76rem; color: var(--muted); }
+
 footer p { font-size: 0.78rem; color: var(--muted); margin-top: 28px; line-height: 1.5; max-width: 68ch; }
 
 /* ---------- mobile ---------- */
@@ -468,7 +516,7 @@ footer p { font-size: 0.78rem; color: var(--muted); margin-top: 28px; line-heigh
   .control-deck { padding: 14px 14px 12px; }
   .deck-row { flex-direction: column; align-items: stretch; gap: 12px; }
   .field { min-width: 0; width: 100%; flex: 1 1 auto; }
-  .field select { min-width: 0; width: 100%; max-width: none; }
+  .field select, .field input[type="text"] { min-width: 0; width: 100%; max-width: none; }
   .segmented { width: 100%; flex-wrap: wrap; }
   .segmented button { flex: 1 1 auto; padding: 8px 6px; white-space: normal; text-align: center; }
   .card { padding: 16px 14px; }
@@ -480,6 +528,7 @@ footer p { font-size: 0.78rem; color: var(--muted); margin-top: 28px; line-heigh
   .main-card-tools { gap: 8px; }
   .chips .chip { max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #view-toggle.segmented button, #rounds-toggle.segmented button { white-space: nowrap; }
+  .marauder-lists { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 400px) {

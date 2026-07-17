@@ -17,10 +17,12 @@ def _ordinal_points(div: Division) -> list[DeviationPoint]:
             mark = ordinal_value(raw)
             if mark is None:
                 continue
-            d = abs(mark - row.place) / norm
+            # Lower ordinal mark than the official place is better, so a positive
+            # signed value means the judge marked the competitor better than they placed.
+            s = max(-1.0, min(1.0, (row.place - mark) / norm))
             points.append(DeviationPoint(
                 judge=judge, competitor=row.competitor, division=div.name,
-                round=div.round, deviation=round(min(d, 1.0), 4),
+                round=div.round, deviation=round(abs(s), 4), signed=round(s, 4),
                 detail=f"marked {raw}, placed {row.place}",
             ))
     return points
@@ -38,10 +40,11 @@ def _callback_points(div: Division) -> list[DeviationPoint]:
             if v is None:
                 v = 0.0
                 raw = raw or "(blank)"
-            d = abs(v - baseline)
+            # Positive means the judge marked them better than the outcome (e.g. Y when not promoted).
+            s = v - baseline
             points.append(DeviationPoint(
                 judge=judge, competitor=row.competitor, division=div.name,
-                round=div.round, deviation=round(d, 4),
+                round=div.round, deviation=round(abs(s), 4), signed=round(s, 4),
                 detail=f"marked {raw}, {outcome}",
             ))
     return points
@@ -77,10 +80,11 @@ def _scores_points(div: Division) -> list[DeviationPoint]:
             i = j
         for row, score in scored:
             rank = ranks[id(row)]
-            d = abs(rank - official[id(row)]) / norm
+            # A better (lower) rank than official means the judge favored them.
+            s = max(-1.0, min(1.0, (official[id(row)] - rank) / norm))
             points.append(DeviationPoint(
                 judge=judge, competitor=row.competitor, division=div.name,
-                round=div.round, deviation=round(min(d, 1.0), 4),
+                round=div.round, deviation=round(abs(s), 4), signed=round(s, 4),
                 detail=f"scored {score:g} (rank {rank:g}), official {official[id(row)]}",
             ))
     return points
