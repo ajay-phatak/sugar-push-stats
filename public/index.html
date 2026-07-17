@@ -150,11 +150,21 @@
     <div class="marauder-disclaimer">
       <p><strong>Use this responsibly.</strong> Judges mark whole fields in seconds, panels are small, and a handful of marks is statistical noise — a judge who "marked you down" at one event may simply have seen a different 20 seconds of your dancing. This view is for satisfying curiosity, not for holding grudges, lobbying judges, or deciding whom to dance in front of. If you find yourself checking it before every comp, close the map.</p>
     </div>
-    <p class="card-note">Type a competitor's name to see which judges' marks were most and least favorable to them, relative to the official results — across every round and division of the loaded event, regardless of the filters above.</p>
-    <div class="field marauder-field">
-      <label for="marauder-name">Competitor name</label>
-      <input type="text" id="marauder-name" list="marauder-names" placeholder="e.g. first and last name" autocomplete="off">
-      <datalist id="marauder-names"></datalist>
+    <p class="card-note">Pick a year and type a competitor's name to see which judges' marks were most and least favorable to them, relative to official results — aggregated across every event they entered that year. First search of a year fetches every event's scoresheets, so it can take a while.</p>
+    <div class="marauder-controls">
+      <div class="field">
+        <label for="marauder-year">Year</label>
+        <select id="marauder-year"></select>
+      </div>
+      <div class="field marauder-field">
+        <label for="marauder-name">Competitor name</label>
+        <input type="text" id="marauder-name" list="marauder-names" placeholder="e.g. first and last name" autocomplete="off">
+        <datalist id="marauder-names"></datalist>
+      </div>
+      <button type="button" class="chip" id="marauder-go">Reveal</button>
+    </div>
+    <div class="main-card-tools">
+      <button type="button" class="chip" id="marauder-low-sample" aria-pressed="true" title="Only ranks judges with at least 3 marks on this competitor (falling back to 2, then 1, when too few judges qualify)">Hide low-sample judges</button>
     </div>
     <div id="marauder-results"></div>
   </div>

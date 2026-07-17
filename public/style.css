@@ -471,7 +471,21 @@ header.masthead { margin-bottom: 22px; }
 }
 .marauder-disclaimer p { margin: 0; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
 
-.marauder-field { margin: 4px 0 4px; }
+.marauder-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 4px 0 4px;
+}
+.marauder-field { margin: 0; }
+#marauder-go {
+  color: var(--surface-1);
+  background: var(--series-1);
+  border-color: var(--series-1);
+  font-weight: 600;
+}
+#marauder-go:hover { color: var(--surface-1); border-color: var(--series-1); filter: brightness(1.08); }
 
 .marauder-lists {
   display: grid;
@@ -529,6 +543,9 @@ footer p { font-size: 0.78rem; color: var(--muted); margin-top: 28px; line-heigh
   .chips .chip { max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #view-toggle.segmented button, #rounds-toggle.segmented button { white-space: nowrap; }
   .marauder-lists { grid-template-columns: 1fr; }
+  .marauder-controls { flex-direction: column; align-items: stretch; }
+  .marauder-controls .field { width: 100%; }
+  #marauder-go { width: 100%; }
 }
 
 @media (max-width: 400px) {

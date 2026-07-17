@@ -35,6 +35,9 @@ const state = {
   view: "judge",        // "judge" | "division"
   marauder: false,      // Marauder's Map card revealed?
   marauderName: "",
+  marauderHideLowSample: true,
+  // year (string) -> { status: "loading"|"done", deviations: [], eventNames: Map(slug -> name), failures: [], noSigned: [] }
+  marauderCache: new Map(),
 };
 
 /* ---------- palette (read from CSS so light/dark stays in style.css) ---------- */
@@ -189,15 +192,20 @@ function groupedDivisions() {
 
 /* ---------- controls ---------- */
 
+function populateYearSelect(sel, thisYear) {
+  for (let y = thisYear; y >= 2019; y--) {
+    sel.add(new Option(String(y), String(y)));
+  }
+}
+
 function initControls() {
   const yearSel = $("year");
   const thisYear = new Date().getFullYear();
-  for (let y = thisYear; y >= 2019; y--) {
-    const opt = new Option(String(y), String(y));
-    yearSel.add(opt);
-  }
+  populateYearSelect(yearSel, thisYear);
   yearSel.addEventListener("change", () => loadEvents(Number(yearSel.value)));
   $("event").addEventListener("change", () => loadAnalysis());
+
+  populateYearSelect($("marauder-year"), thisYear);
 
   wireSegmented($("rounds-toggle"), (val) => {
     state.rounds = val;
@@ -264,6 +272,28 @@ function initControls() {
 
   $("marauder-name").addEventListener("input", (e) => {
     state.marauderName = e.target.value;
+    // renderMarauder never fetches — before the year is cached it just shows
+    // the "Press Reveal" hint, so live re-rendering here is always safe. The
+    // one exception: don't clobber an in-flight fan-out's progress line.
+    const entry = state.marauderCache.get($("marauder-year").value);
+    if (!entry || entry.status === "done") renderMarauder();
+  });
+  $("marauder-name").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      startMarauderSearch();
+    }
+  });
+  $("marauder-go").addEventListener("click", () => startMarauderSearch());
+  $("marauder-low-sample").addEventListener("click", () => {
+    const btn = $("marauder-low-sample");
+    state.marauderHideLowSample = !state.marauderHideLowSample;
+    btn.setAttribute("aria-pressed", String(state.marauderHideLowSample));
+    const entry = state.marauderCache.get($("marauder-year").value);
+    if (!entry || entry.status === "done") renderMarauder();
+  });
+  $("marauder-year").addEventListener("change", () => {
+    buildMarauderNames();
     renderMarauder();
   });
   $("mischief-managed").addEventListener("click", () => {
@@ -293,6 +323,13 @@ function initMarauderTrigger() {
       buffer = "";
       state.marauder = true;
       $("marauder-card").hidden = false;
+      // Default the year picker to whatever's loaded above, but only before
+      // any fan-out has ever happened — once a year is cached, respect
+      // whatever the user already picked.
+      if (state.marauderCache.size === 0) {
+        $("marauder-year").value = $("year").value;
+      }
+      buildMarauderNames();
       renderMarauder();
       $("marauder-card").scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
@@ -304,8 +341,15 @@ function initMarauderTrigger() {
 // both partners are searchable. The spaces around "and" keep names like
 // "Alexandra" intact.
 function buildMarauderNames() {
+  // Prefer the selected year's cached aggregate once it's fully loaded;
+  // otherwise fall back to whatever single event is currently on screen.
+  const yearEntry = state.marauderCache.get($("marauder-year").value);
+  const source = (yearEntry && yearEntry.status === "done")
+    ? yearEntry.deviations
+    : (state.data ? state.data.deviations : []);
+
   const seen = new Map(); // lowercase -> first-seen display casing
-  for (const p of state.data.deviations) {
+  for (const p of source) {
     for (const part of p.competitor.split(/\s+(?:and|&)\s+/i)) {
       const name = part.trim();
       if (!name) continue;
@@ -325,6 +369,10 @@ function marauderFavorSpan(favor) {
   return `<span class="favor ${cls}">${sign}${Math.abs(favor).toFixed(3)}</span>`;
 }
 
+function pluralize(n, word) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
 function marauderJudgeList(rows) {
   return `
     <ul class="marauder-judge-list">
@@ -332,41 +380,119 @@ function marauderJudgeList(rows) {
         <li>
           <span class="mj-name">${escapeHtml(r.judge)}</span>
           ${marauderFavorSpan(r.favor)}
-          <span class="mj-n">${r.n} mark${r.n === 1 ? "" : "s"}</span>
+          <span class="mj-n">${pluralize(r.n, "mark")} · ${pluralize(r.events.size, "event")}</span>
         </li>
       `).join("")}
     </ul>
   `;
 }
 
-function renderMarauder() {
+// Fetches every event of `year` and folds their deviations into
+// state.marauderCache, updating a progress line in #marauder-results as
+// each event settles. Guards against a second fan-out for the same year.
+async function loadMarauderYear(year) {
+  const already = state.marauderCache.get(year);
+  if (already && already.status === "loading") return;
+
+  const entry = { status: "loading", deviations: [], eventNames: new Map(), failures: [], noSigned: [] };
+  state.marauderCache.set(year, entry);
+
   const box = $("marauder-results");
-  if (!state.data) {
-    box.innerHTML = `<p class="card-note">Pick a year and event above first.</p>`;
+  let events;
+  try {
+    const resp = await fetch(`/api/events?year=${year}`);
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+    events = await resp.json();
+  } catch (err) {
+    state.marauderCache.delete(year);
+    box.innerHTML = `<p class="card-note">Could not load the ${escapeHtml(String(year))} event list: ${escapeHtml(err.message)}</p>`;
     return;
   }
 
+  for (const ev of events) entry.eventNames.set(ev.slug, ev.name);
+
+  const total = events.length;
+  let done = 0;
+  const updateProgress = (currentName) => {
+    box.innerHTML = `
+      <p class="card-note">Summoning scoresheets… ${done} of ${total} events${currentName ? ` (${escapeHtml(currentName)})` : ""}</p>
+      <p class="marauder-footnote">First fetches of an event can be slow.</p>
+    `;
+  };
+  updateProgress("");
+
+  const CONCURRENCY = 4;
+  let idx = 0;
+  async function worker() {
+    while (idx < events.length) {
+      const ev = events[idx++];
+      try {
+        const resp = await fetch(`/api/analysis?year=${year}&event=${encodeURIComponent(ev.slug)}`);
+        if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+        const data = await resp.json();
+        const all = data.deviations || [];
+        const withSigned = all.filter((p) => p.signed !== undefined && p.signed !== null);
+        if (all.length && !withSigned.length) {
+          entry.noSigned.push(ev.name);
+        } else {
+          for (const p of withSigned) entry.deviations.push({ ...p, event: ev.name });
+        }
+      } catch (err) {
+        entry.failures.push(ev.name);
+      }
+      done++;
+      updateProgress(ev.name);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, events.length) }, () => worker()));
+
+  entry.status = "done";
+  buildMarauderNames();
+  renderMarauder();
+}
+
+// Wired to #marauder-go and Enter in the name field: fetches the selected
+// year if it isn't cached yet, otherwise just re-renders against the cache.
+function startMarauderSearch() {
+  const year = $("marauder-year").value;
+  const entry = state.marauderCache.get(year);
+  if (entry && entry.status === "loading") return; // fan-out already in flight
+  if (entry && entry.status === "done") {
+    renderMarauder();
+    return;
+  }
+  loadMarauderYear(year);
+}
+
+function renderMarauder() {
+  const box = $("marauder-results");
+  const year = $("marauder-year").value;
   const query = state.marauderName.trim();
+
   if (query.length < 3) {
     box.innerHTML = "";
     return;
   }
-  const q = query.toLowerCase();
-  const matched = state.data.deviations.filter((p) => p.competitor.toLowerCase().includes(q));
-  if (!matched.length) {
-    box.innerHTML = `<p class="card-note">No competitor matching that name in this event.</p>`;
+
+  const cacheEntry = state.marauderCache.get(year);
+  if (cacheEntry && cacheEntry.status === "loading") {
+    box.innerHTML = `<p class="card-note">Summoning ${escapeHtml(year)} scoresheets…</p>`;
+    return;
+  }
+  if (!cacheEntry) {
+    box.innerHTML = `<p class="card-note">Press Reveal to fetch all ${escapeHtml(year)} events.</p>`;
     return;
   }
 
-  // Older cached API responses may predate the "signed" field.
-  const withSigned = matched.filter((p) => p.signed !== undefined && p.signed !== null);
-  if (!withSigned.length) {
-    box.innerHTML = `<p class="card-note">This event's data is from an older cached version — try again later.</p>`;
+  const q = query.toLowerCase();
+  const matched = cacheEntry.deviations.filter((p) => p.competitor.toLowerCase().includes(q));
+  if (!matched.length) {
+    box.innerHTML = `<p class="card-note">No competitor matching that name in ${escapeHtml(year)}.</p>`;
     return;
   }
 
   const byJudge = new Map();
-  for (const p of withSigned) {
+  for (const p of matched) {
     if (!byJudge.has(p.judge)) byJudge.set(p.judge, []);
     byJudge.get(p.judge).push(p);
   }
@@ -376,20 +502,38 @@ function renderMarauder() {
       judge,
       favor: pts.reduce((s, p) => s + p.signed, 0) / pts.length,
       n: pts.length,
+      events: new Set(pts.map((p) => p.event)),
       points: pts,
     });
   }
   judgeRows.sort((a, b) => b.favor - a.favor);
 
-  const distinctCompetitors = [...new Set(withSigned.map((p) => p.competitor))];
-  const summary = `<strong>${withSigned.length} mark${withSigned.length === 1 ? "" : "s"}</strong> matched "${escapeHtml(query)}" ` +
-    `across ${judgeRows.length} judge${judgeRows.length === 1 ? "" : "s"} (${distinctCompetitors.map((c) => escapeHtml(c)).join(", ")})`;
+  const distinctCompetitors = [...new Set(matched.map((p) => p.competitor))];
+  const distinctEvents = new Set(matched.map((p) => p.event));
+  const namesShown = distinctCompetitors.slice(0, 6).map((c) => escapeHtml(c)).join(", ");
+  const namesMore = distinctCompetitors.length - 6;
 
-  const top3 = judgeRows.slice(0, 3);
-  const bottom3 = judgeRows.slice(-3).reverse();
+  const summary = `<strong>${pluralize(matched.length, "mark")}</strong> matched "${escapeHtml(query)}" ` +
+    `across ${pluralize(judgeRows.length, "judge")} and ${pluralize(distinctEvents.size, "event")}`;
+  const namesLine = namesShown + (namesMore > 0 ? ` +${namesMore} more` : "");
+
+  // Year-wide data exists precisely so a single lucky mark can't dominate:
+  // rank only judges with a decent sample, as long as enough of them qualify
+  // to fill both lists. The toggle lets the curious rank everyone anyway.
+  let minMarks = 1;
+  if (state.marauderHideLowSample) {
+    for (const t of [3, 2]) {
+      if (judgeRows.filter((r) => r.n >= t).length >= 6) { minMarks = t; break; }
+    }
+  }
+  const ranked = judgeRows.filter((r) => r.n >= minMarks);
+
+  const top3 = ranked.slice(0, 3);
+  const bottom3 = ranked.slice(-3).reverse();
 
   box.innerHTML = `
     <p class="card-note">${summary}</p>
+    <p class="card-note">${namesLine}</p>
     <div class="marauder-lists">
       <div>
         <h3 class="marauder-list-title">Most favorable</h3>
@@ -401,6 +545,9 @@ function renderMarauder() {
       </div>
     </div>
     <p class="marauder-footnote">Favor = average signed deviation from the official result: + means the judge marked them better than they placed, − worse. Values near 0 mean the judge agreed with the outcome.</p>
+    ${minMarks > 1 ? `<p class="marauder-footnote">Ranked among the ${pluralize(ranked.length, "judge")} with at least ${minMarks} marks on this competitor; single-mark judges are too noisy to rank.</p>` : ""}
+    ${cacheEntry.failures.length ? `<p class="marauder-footnote">Couldn't load: ${cacheEntry.failures.map((n) => escapeHtml(n)).join(", ")}.</p>` : ""}
+    ${cacheEntry.noSigned.length ? `<p class="marauder-footnote">No favor data (stale cache): ${cacheEntry.noSigned.map((n) => escapeHtml(n)).join(", ")}.</p>` : ""}
   `;
 }
 
